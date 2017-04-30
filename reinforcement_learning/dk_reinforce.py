@@ -46,41 +46,40 @@ QUERY PREDICTION ALGORITHMS:
 
 """
 
-
 parser = argparse.ArgumentParser(description='PyTorch REINFORCE example')
-parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
-                    help='discount factor (default: 0.99)')
-parser.add_argument('--seed', type=int, default=543, metavar='N',
-                    help='random seed (default: 543)')
-parser.add_argument('--render', action='store_true',
-                    help='render the environment')
-parser.add_argument('--log_interval', type=int, default=10, metavar='N',
-                    help='interval between training status logs (default: 10)')
-#
+parser.add_argument('--render', action='store_true', help='render the environment')
 parser.add_argument('--resume', action='store_true')
 args = parser.parse_args()
 
 
-#env = gym.make('CartPole-v1')
-from gym.dk_cartpole import CartPoleEnv
-if not args.resume:
-    env = CartPoleEnv()
-    # FIXME: seeding
-    env.seed(args.seed)
-    torch.manual_seed(args.seed)
+gamma = 1.
+num_seeds = 100
+query_fns = ['p=0', 'p=.1', 'p=.5', 'p=1']
+num_episodes = 1000
+num_steps = 500
+
+# TODO: query cost, timing
+
+# -------------------------
+print "LOGGING"
+rewards_true = np.zeros((len(query_fns), num_seeds, num_episodes, num_steps))
+rewards_predicted = np.zeros((len(query_fns), num_seeds, num_episodes, num_steps))
+rewards_observed = np.zeros((len(query_fns), num_seeds, num_episodes, num_steps))
+queries = np.zeros((len(query_fns), num_seeds, num_episodes, num_steps))
+episode_lengths = np.zeros((len(query_fns), num_seeds, num_episodes))
 
 
+
+# -------------------------
+print "DEFINE MODEL CLASSES"
 class RewardPredictor(nn.Module):
     """
     There's some details to be worked out here.... we want to train on all data points an approximately equal number of times...
     For now, we'll just keep all observations in memory, and train on a random subset every time.
     """
     def __init__(self, batch_size=32):
-        # TODO: does this come before or after super?
-        self.__dict__.update(locals())
-
         super(RewardPredictor, self).__init__()
-
+        self.batch_size = batch_size
         self.affine1 = nn.Linear(1, 64)
         self.affine2 = nn.Linear(64, 1)
         self.memory = [] # each element is an ordered pair: (x, r)
@@ -90,7 +89,9 @@ class RewardPredictor(nn.Module):
         x = F.relu(self.affine1(x))
         return self.affine2(x)
 
+    # TODO: we could do this like the the Policy and always just train on the last batch of experience
     def step(self):
+
         if len(self.memory) >= self.batch_size:
             inds = np.random.choice( len(self.memory), self.batch_size)
             examples = [self.memory[ind] for ind in inds]
@@ -102,126 +103,123 @@ class RewardPredictor(nn.Module):
             loss = ((self.forward(inputs) - targets)**2).mean()
             loss.backward()
             self.opt.step()
-            #print "rewardfn loss", loss.data[0]
-            
 
     def fn(self, state):
-        #state = torch.from_numpy(state).float().unsqueeze(0)
-        state = torch.from_numpy(state).float()#.unsqueeze(0)
+        state = torch.from_numpy(state).float()
         return self(Variable(state))
 
 
-
-
-# below here could be cleaned up...
 class Policy(nn.Module):
     def __init__(self):
         super(Policy, self).__init__()
         self.affine1 = nn.Linear(4, 64)
         self.affine2 = nn.Linear(64, 2)
-
         self.saved_actions = []
         self.rewards = []
+        self.optimizer = optim.Adam(policy.parameters(), lr=1e-2)
 
     def forward(self, x):
         x = F.relu(self.affine1(x))
         action_scores = self.affine2(x)
         return F.softmax(action_scores)
 
+    def fn(self, state):
+        state = torch.from_numpy(state).float().unsqueeze(0)
+        probs = self(Variable(state))
+        action = probs.multinomial()
+        self.saved_actions.append(action)
+        return action.data
 
-if not args.resume:
-    policy = Policy()
-    reward_predictor = RewardPredictor()
-    optimizer = optim.Adam(policy.parameters(), lr=1e-2)
-
-
-def select_action(state):
-    state = torch.from_numpy(state).float().unsqueeze(0)
-    probs = policy(Variable(state))
-    action = probs.multinomial()
-    policy.saved_actions.append(action)
-    return action.data
-
-
-# TODO: should also train reward predictor after each episode
-def finish_episode():
-    # REINFORCE
-    R = 0
-    rewards = []
-    for r in policy.rewards[::-1]:
-        R = r + args.gamma * R
-        rewards.insert(0, R)
-    rewards = torch.Tensor(rewards)
-    rewards = (rewards - rewards.mean()) / (rewards.std() + np.finfo(np.float32).eps)
-    for action, r in zip(policy.saved_actions, rewards):
-        action.reinforce(r)
-
-    optimizer.zero_grad()
-    autograd.backward(policy.saved_actions, [None for _ in policy.saved_actions])
-    optimizer.step()
-    del policy.rewards[:]
-    del policy.saved_actions[:]
-    for nstep in range(3):
-        reward_predictor.step()
-
-
-
-
-if args.resume:
-    del policy.rewards[:]
-    del policy.saved_actions[:]
-
+    def step(self):
+        R = 0
+        rewards = []
+        for r in self.rewards[::-1]:
+            R = r + args.gamma * R
+            rewards.insert(0, R)
+        rewards = torch.Tensor(rewards)
+        # TODO: what is up with the normalization by std??
+        rewards = (rewards - rewards.mean()) / (rewards.std() + np.finfo(np.float32).eps)
+        for action, r in zip(self.saved_actions, rewards):
+            action.reinforce(r)
+        self.optimizer.zero_grad()
+        autograd.backward(self.saved_actions, [None for _ in self.saved_actions])
+        self.optimizer.step()
+        del self.rewards[:]
+        del self.saved_actions[:]
 
 
 # -------------------------
-print "LOGGING"
-rewards_true
-rewards_predicted
-rewards_observed
-queries
-episode_length
+print "TRAINING"
+
+for seed in range(num_seeds):
+
+    print "making a new random environment"
+    #env = gym.make('CartPole-v1')
+    from gym.dk_cartpole import CartPoleEnv
+    if not args.resume:
+        env = CartPoleEnv()
+        # FIXME: seeding
+        env.seed(seed)
+        torch.manual_seed(seed)
+
+    for nn, query_fn in enumerate(query_fns):
+
+        if args.resume:
+            print "RESUME"
+            del policy.rewards[:]
+            del policy.saved_actions[:]
+        else:
+            print "DECLARING MODELS"
+            policy = Policy()
+            reward_predictor = RewardPredictor()
+
+        def finish_episode():
+            reward_predictor.step()
+            policy.step()
+            del policy.rewards[:]
+            del policy.saved_actions[:]
 
 
+        running_reward = 0
+        for episode in range(num_episodes):
+            state = env.reset()
+            for step in range(num_steps):
+                action = policy.fn(state)
+                state, reward, done, _ = env.step(action[0,0])
 
+                if args.render:
+                    if step == 0:
+                        learned_reward_function = reward_predictor(Variable(torch.from_numpy(np.linspace(-2.4, 2.4, 600).reshape((-1,1))).float())).data.numpy()
+                    else:
+                        learned_reward_function = None
+                    env._render(learned_reward_function=learned_reward_function)
+                
+                # --------------------
+                # QUERY???
+                query = np.random.rand() < .5 # TODO
+                query = 1
+                query = 0
 
-running_reward = 0
-for i_episode in range(1000):#count(1):
-    state = env.reset()
-    for t in range(500): # episode_length
-        action = select_action(state)
-        state, reward, done, _ = env.step(action[0,0])
-        if args.render:
-            if t == 0:
+                if query:
+                    policy.rewards.append(reward)
+                    reward_predictor.memory.append([state[0], reward])
+                else: # use the predicted reward instead
+                    policy.rewards.append(reward_predictor.fn(np.array(state[0]).reshape((1,1))).data.numpy()[0][0])
+
+                if done:
+                    episode_lengths[nn, seed, episode] = step
+                    break
+
+            # TODO: track predicted and actual rewards separately!
+            running_reward = running_reward * 0.99 + .01 * (sum(policy.rewards))
+            finish_episode()
+            if episode % args.log_interval == 0:
+                print('Episode {}\tLast length: {:5d}\trunning average reward: {:.2f}'.format(episode, step, running_reward))
+            if 0:#episode % 25 == 0:
+                from pylab import *
+                plot(env.discretized_reward_function, label='ground truth')
                 learned_reward_function = reward_predictor(Variable(torch.from_numpy(np.linspace(-2.4, 2.4, 600).reshape((-1,1))).float())).data.numpy()
-            else:
-                learned_reward_function = None
-            env._render(learned_reward_function=learned_reward_function)
-        
-        # --------------------
-        # QUERY???
-        query = np.random.rand() < .5 # TODO
-        query = 1
-        query = 0
+                plot(learned_reward_function, label='predicted')
 
-        if query:
-            policy.rewards.append(reward)
-            reward_predictor.memory.append([state[0], reward])
-        else: # use the predicted reward instead
-            policy.rewards.append(reward_predictor.fn(np.array(state[0]).reshape((1,1))).data.numpy()[0][0])
-
-        if done:
-            break
-
-    # TODO: track predicted and actual rewards separately!
-    running_reward = running_reward * 0.99 + .01 * (sum(policy.rewards))
-    finish_episode()
-    if i_episode % args.log_interval == 0:
-        print('Episode {}\tLast length: {:5d}\trunning average reward: {:.2f}'.format(i_episode, t, running_reward))
-    if 0:#i_episode % 25 == 0:
-        from pylab import *
-        plot(env.discretized_reward_function, label='ground truth')
-        learned_reward_function = reward_predictor(Variable(torch.from_numpy(np.linspace(-2.4, 2.4, 600).reshape((-1,1))).float())).data.numpy()
-        plot(learned_reward_function, label='predicted')
-
-show()
+        show()
 
