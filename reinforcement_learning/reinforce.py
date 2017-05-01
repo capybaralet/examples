@@ -20,10 +20,12 @@ parser.add_argument('--render', action='store_true',
                     help='render the environment')
 parser.add_argument('--log_interval', type=int, default=10, metavar='N',
                     help='interval between training status logs (default: 10)')
+#
+parser.add_argument('--resume', action='store_true')
 args = parser.parse_args()
 
 
-env = gym.make('CartPole-v0')
+env = gym.make('CartPole-v1')
 env.seed(args.seed)
 torch.manual_seed(args.seed)
 
@@ -31,8 +33,8 @@ torch.manual_seed(args.seed)
 class Policy(nn.Module):
     def __init__(self):
         super(Policy, self).__init__()
-        self.affine1 = nn.Linear(4, 128)
-        self.affine2 = nn.Linear(128, 2)
+        self.affine1 = nn.Linear(4, 64)
+        self.affine2 = nn.Linear(64, 2)
 
         self.saved_actions = []
         self.rewards = []
@@ -43,8 +45,9 @@ class Policy(nn.Module):
         return F.softmax(action_scores)
 
 
-model = Policy()
-optimizer = optim.Adam(model.parameters(), lr=1e-2)
+if not args.resume:
+    model = Policy()
+    optimizer = optim.Adam(model.parameters(), lr=1e-2)
 
 
 def select_action(state):
@@ -68,6 +71,10 @@ def finish_episode():
     optimizer.zero_grad()
     autograd.backward(model.saved_actions, [None for _ in model.saved_actions])
     optimizer.step()
+    del model.rewards[:]
+    del model.saved_actions[:]
+
+if args.resume:
     del model.rewards[:]
     del model.saved_actions[:]
 
