@@ -41,6 +41,9 @@ parser.add_argument('--log-interval', type=int, default=200, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str,  default='model.pt',
                     help='path to save the final model')
+# DK added
+parser.add_argument('--unshared', action='store_true',
+                    help='use different recurrent weights at each time-step??')
 args = parser.parse_args()
 
 # Set the random seed manually for reproducibility.
@@ -78,9 +81,15 @@ test_data = batchify(corpus.test, eval_batch_size)
 ###############################################################################
 
 ntokens = len(corpus.dictionary)
-model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied)
-if args.cuda:
-    model.cuda()
+if args.unshared:
+    model = model.UnsharedRNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.bptt, args.dropout, args.tied)
+    if args.cuda:
+        model.cuda()
+        model.rnn.i2h = [ [pp.cuda() for pp in param] for param in model.rnn.i2h] # TODO: hacky as shit
+else:
+    model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied)
+    if args.cuda:
+        model.cuda()
 
 criterion = nn.CrossEntropyLoss()
 
@@ -125,6 +134,7 @@ def train():
     start_time = time.time()
     ntokens = len(corpus.dictionary)
     hidden = model.init_hidden(args.batch_size)
+    #print "hidden", hidden
     for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
         data, targets = get_batch(train_data, i)
         # Starting each batch, we detach the hidden state from how it was previously produced.
@@ -142,7 +152,7 @@ def train():
 
         total_loss += loss.data
 
-        if batch % args.log_interval == 0 and batch > 0:
+        if batch % args.log_interval == 0:# and batch > 0:
             cur_loss = total_loss[0] / args.log_interval
             elapsed = time.time() - start_time
             print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f} | ms/batch {:5.2f} | '
