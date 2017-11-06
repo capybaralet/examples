@@ -11,6 +11,8 @@ import torch.autograd as autograd
 from torch.autograd import Variable
 
 
+# TODO: with REINFORCE, we're only doing one update per epoch, so we need to recombine at a slower scale (or do more updates / epoch)!
+
 parser = argparse.ArgumentParser(description='PyTorch REINFORCE example')
 parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
                     help='discount factor (default: 0.99)')
@@ -25,23 +27,22 @@ parser.add_argument('--resume', action='store_true')
 args = parser.parse_args()
 
 #
-n_genes = 32
-n_agents = 17
+n_genes = 31
+n_agents = 20
 
 
 env = gym.make('CartPole-v1')
 env.seed(args.seed)
 torch.manual_seed(args.seed)
 
-# TODO: different agets need different experiences!!
-# TODO: record the rewards for each agent, and then recombine based on that
 class Policy(nn.Module):
     def __init__(self):
         super(Policy, self).__init__()
         self.affine1 = nn.Linear(4, 64)
         self.affine2 = nn.Linear(64, 2)
 
-        self.genes = nn.Parameter(.01 * torch.randn(n_agents, n_genes))
+        # TODO: should this be trainable??
+        self.genes = nn.Parameter(.01 * torch.randn(n_genes))
         # these transform genes into CBN params
         self.gene_l1 = nn.Linear(n_genes, 64)
         self.gene_l2 = nn.Linear(64, 2*64)
@@ -53,18 +54,43 @@ class Policy(nn.Module):
     def forward(self, x):
         #x, genes = x[:, :4], x[:, 4:] 
         x = self.affine1(x)
-        cbn = self.gene_l2(F.relu(self.gene_l1(self.genes)))[0] # TODO [0]
+        cbn = self.gene_l2(F.relu(self.gene_l1(self.genes)))
         x = x * torch.exp(cbn[::2] + .0001) + cbn[1::2]
         x = F.relu(x)
         action_scores = self.affine2(x)
         return F.softmax(action_scores)
 
-    def recombine(self):
-        """
-        For now, we'll recombine genes, and just average all the other params
-        Then we can compare that with averaging genes, as well
-        """
-        pass
+
+# TODO: record the rewards for each agent, and then recombine based on that
+#def syncronize(agents):
+def recombine(agents):
+    """
+    For now, we'll recombine genes, and just average all the other params
+    Then we can compare that with averaging genes, as well
+    """
+    # TODO: select which agents are fit
+    fit_agents = []
+    # which of the parents to inheret from for each gene
+    which_parent = np.random.binomial(p=.5, size=(n_agents/2, n_genes))
+    moms = np.random.choice(range(len(n_agents/2)), n_agents/2, replace=True)
+    dads = []
+    for mom in moms:
+        l = range(len(n_agents/2))
+        l.pop(mom)
+        dads.append(np.random.choice(l, 1))
+    moms = [fit_agents[mom].genes() for mom in moms]
+    dads = [fit_agents[dad].genes() for dad in dads]
+    #kids = []
+    #for parent, mom, dad in zip(which_parent, mom, dad):
+    kids = [parent * mom + (1 - parent) * dad for parent, mom, dad in zip(which_parent, moms, dads) ] 
+    # TODO: actually find the good ones and replace the bad ones with the kids
+
+
+    # TODO: average fit agents non-gene params
+
+    #np.random.binomial(p=.5, size=(n_genes, n_agents/2))
+
+    pass
 
 
 
