@@ -13,6 +13,15 @@ from torch.autograd import Variable
 
 from torch import Tensor as TT
 
+# TODO:
+"""
+Features:
+    different recombinators
+    compare 
+
+"""
+
+
 # TODO: with REINFORCE, we're only doing one update per epoch, so we need to recombine at a slower scale (or do more updates / epoch)!
 
 parser = argparse.ArgumentParser(description='PyTorch REINFORCE example')
@@ -25,14 +34,20 @@ parser.add_argument('--render', action='store_true',
 parser.add_argument('--log_interval', type=int, default=10, metavar='N',
                     help='interval between training status logs (default: 10)')
 #
+parser.add_argument('--save_path', type=str, default='./')
+parser.add_argument('--recombine_every_n', type=int, default=50)
+parser.add_argument('--n_episodes', type=int, default=50)
+#
 parser.add_argument('--resume', action='store_true')
 args = parser.parse_args()
+args_dict = args.__dict__
+locals().update(args_dict)
 
 #
 n_genes = 31
-n_agents = 20
+n_agents = 10
 n_survivors = n_agents / 2
-recombine_every_n  = 4
+#recombine_every_n  = 5
 
 env = gym.make('CartPole-v1')
 env.seed(args.seed)
@@ -73,8 +88,9 @@ def recombine(agents):
     """
     n_kids = n_agents - n_survivors
     # TODO: sum across episodes (???)
-    all_rewards = [agent.rewards[-1] for agent in agents]
-    srts = np.argsort(all_rewards)
+    all_returns = [agent.returns for agent in agents]
+    #print all_returns
+    srts = np.argsort(all_returns)
     # agents with the highest fitness(=returns) survive
     fit_agents = [agents[srts[n]] for n in range(n_survivors)]
     unfit_agents = [agents[srts[n]] for n in range(n_survivors, n_agents)]
@@ -86,9 +102,11 @@ def recombine(agents):
     possible_parents = [set(p) for p in possible_parents]
     # replace=True ==> couples can have multiple kids
     parents = np.random.choice(possible_parents, n_kids, replace=True)
+    #print parents
     # ...and convert them BACK to lists :P
     parents = [list(p) for p in parents]
     kids_genes = [which_parent * fit_agents[parent[0]].genes.data.numpy() + (1 - which_parent) * fit_agents[parent[1]].genes.data.numpy() for which_parent, parent in zip(which_parents, parents) ] 
+    #print kids_genes[0]
     # TODO: replace the bad ones genes with the kids genes
     for kid_genes, agent in zip(kids_genes, unfit_agents):
         agent.genes.data = TT(kid_genes)
@@ -108,7 +126,7 @@ def sync(agents):
 
 
 agents = [Policy() for _ in range(n_agents)]
-optimizers = [optim.SGD(agent.parameters(), lr=1e-2, momentum=0) for agent in agents]
+optimizers = [optim.SGD(agent.parameters(), lr=5e-3, momentum=0) for agent in agents]
 # TODO: adam
 #optimizers = [optim.Adam(agent.parameters(), lr=1e-2) for agent in agents]
 
@@ -148,6 +166,7 @@ def finish_episode(agent, optimizer):
     optimizer.zero_grad()
     autograd.backward(agent.saved_actions, [None for _ in agent.saved_actions])
     optimizer.step()
+    agent.returns = len(agent.rewards)
     del agent.rewards[:]
     del agent.saved_actions[:]
 
@@ -157,30 +176,47 @@ if args.resume:
 
 
 running_reward = 10
-for i_episode in count(1):
-    for agent, optimizer in zip(agents, optimizers):
+all_returns = np.zeros((n_episodes, n_agents))
+
+for i_episode in range(n_episodes):#count(1):
+
+    print i_episode
+    if i_episode > 0 and i_episode % recombine_every_n == 0:
+        print "\t\t\trecombining!"
+        recombine(agents)
+
+    for nn, (agent, optimizer) in enumerate(zip(agents, optimizers)):
         state = env.reset()
-        for t in range(10000): # Don't infinite loop while learning
+
+        done = 0
+        t = 0
+        #for t in range(10000): # Don't infinite loop while learning
+        while not done:
             action = select_action(agent, state)
             state, reward, done, _ = env.step(action[0,0])
             if args.render:
                 env.render()
             agent.rewards.append(reward)
-            if done:
-                break
+            t += 1
+            #if done:
+            #    break
 
-        # TODO: fix monitoring
+        # TODO: monitoring
+        all_returns[i_episode, nn] = t
         running_reward = running_reward * 0.99 + t * 0.01
         finish_episode(agent, optimizer)
         #if i_episode % args.log_interval == 0:
         if i_episode % recombine_every_n == 0:
             print('Episode {}\tLast length: {:5d}\tAverage length: {:.2f}'.format(
                 i_episode, t, running_reward))
-        if running_reward > 200:
-            print("Solved! Running reward is now {} and "
-                  "the last episode runs to {} time steps!".format(running_reward, t))
-            break
+        #if running_reward > 200:
+            #print("Solved! Running reward is now {} and "
+                  #"the last episode runs to {} time steps!".format(running_reward, t))
+            #break
     sync(agents)
 
-    if i_episode % recombine_every_n == -1:
-        recombine(agents)
+
+np.save(save_path + 'all_returns.npy', all_returns)
+
+
+
