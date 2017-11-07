@@ -33,6 +33,8 @@ cum_queries = np.cumsum(queries.reshape((len(query_fns), num_seeds, -1)), axis=-
 
 figure()
 for qfn, query_fn in enumerate(query_fns):
+    cr = cum_rewards[qfn]
+    cq = cum_queries[qfn]
     # 
     subplot(2,2,1)
     ylabel('rewards')
@@ -45,12 +47,13 @@ for qfn, query_fn in enumerate(query_fns):
     # 
     subplot(2,2,2)
     ylabel('performance (c=.1)')
-    plot([(r - .1 * nq).mean(0) for r,nq in zip(cum_rewards[qfn], cum_queries[qfn])])
+    plot((cr - .1 * cq).mean(0))# for r,nq in zip(cum_rewards[qfn], cum_queries[qfn])])
     # 
     subplot(2,2,4)
     xlabel('step')
     ylabel('performance (c=1)')
-    plot([(r - nq).mean(0) for r,nq in zip(cum_rewards[qfn], cum_queries[qfn])], label=query_fn)
+    plot((cr - 1 * cq).mean(0), label=query_fn)# for r,nq in zip(cum_rewards[qfn], cum_queries[qfn])])
+    #plot([(r - nq).mean(0) for r,nq in zip(cum_rewards[qfn], cum_queries[qfn])], label=query_fn)
 legend()
 
 
