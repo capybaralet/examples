@@ -17,6 +17,7 @@ from torch import Tensor as TT
 """
 Features:
     different recombinators
+    recombine EVERYTHING
     compare 
 
 """
@@ -37,6 +38,7 @@ parser.add_argument('--log_interval', type=int, default=10, metavar='N',
 parser.add_argument('--save_path', type=str, default='./')
 parser.add_argument('--recombine_every_n', type=int, default=50)
 parser.add_argument('--n_episodes', type=int, default=50)
+parser.add_argument('--recombinator', type=str, default='dropout')
 #
 parser.add_argument('--resume', action='store_true')
 args = parser.parse_args()
@@ -60,7 +62,7 @@ class Policy(nn.Module):
         self.affine2 = nn.Linear(64, 2)
 
         # TODO: should this be trainable??
-        self.genes = nn.Parameter(.01 * torch.randn(1,n_genes))
+        self.genes = nn.Parameter(1. * torch.randn(1,n_genes))
         self.genes.name = 'genes'
         # these transform genes into CBN params
         self.gene_l1 = nn.Linear(n_genes, 64)
@@ -73,8 +75,8 @@ class Policy(nn.Module):
     def forward(self, x):
         #x, genes = x[:, :4], x[:, 4:] 
         x = self.affine1(x)
-        cbn = self.gene_l2(F.relu(self.gene_l1(self.genes)))
-        x = x * (cbn[:,::2] + 1.) + cbn[:,1::2]
+        self.cbn = self.gene_l2(F.relu(self.gene_l1(self.genes)))
+        x = x * (self.cbn[:,::2] + 1.) + self.cbn[:,1::2]
         x = F.relu(x)
         action_scores = self.affine2(x)
         return F.softmax(action_scores)
@@ -95,7 +97,10 @@ def recombine(agents):
     fit_agents = [agents[srts[n]] for n in range(n_survivors)]
     unfit_agents = [agents[srts[n]] for n in range(n_survivors, n_agents)]
     # which of the parents to inheret from for each gene
-    which_parents = np.random.binomial(n=1, p=.5, size=(n_kids, n_genes))
+    if recombinator == 'dropout':
+        which_parents = np.random.binomial(n=1, p=.5, size=(n_kids, n_genes))
+    elif recombinator == 'chromosome':
+        which_parents = np.hstack((np.ones(n_genes/2), np.zeros(n_genes - n_genes/2)))
     # all possible couples
     possible_parents = list(itertools.combinations(range(n_survivors), 2))
     # convert them to sets because numpy is dumb
@@ -214,7 +219,6 @@ for i_episode in range(n_episodes):#count(1):
                   #"the last episode runs to {} time steps!".format(running_reward, t))
             #break
     sync(agents)
-
 
 np.save(save_path + 'all_returns.npy', all_returns)
 
