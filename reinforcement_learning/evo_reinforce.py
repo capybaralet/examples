@@ -40,9 +40,9 @@ parser.add_argument('--recombine_every_n', type=int, default=50)
 parser.add_argument('--n_episodes', type=int, default=50)
 parser.add_argument('--recombinator', type=str, default='dropout')
 
-parser.add_argument('--n_agents', type=int, default=10)
+parser.add_argument('--n_agents', '-a', type=int, default=10)
 parser.add_argument('--lr', type=float, default=5e-3)
-parser.add_argument('--prop_survivors', type=float, default=0.5)
+parser.add_argument('--prop_survivors', '-ps', type=float, default=0.5)
 
 
 #
