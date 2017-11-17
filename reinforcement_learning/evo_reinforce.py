@@ -39,6 +39,8 @@ parser.add_argument('--save_path', type=str, default='./')
 parser.add_argument('--recombine_every_n', type=int, default=50)
 parser.add_argument('--n_episodes', type=int, default=50)
 parser.add_argument('--recombinator', type=str, default='dropout')
+parser.add_argument('--train_genes', type=int, default=1)
+parser.add_argument('--train_gene_layers', type=int, default=1)
 #
 parser.add_argument('--resume', action='store_true')
 args = parser.parse_args()
@@ -80,6 +82,7 @@ class Policy(nn.Module):
         x = F.relu(x)
         action_scores = self.affine2(x)
         return F.softmax(action_scores)
+
 
 
 
@@ -158,7 +161,7 @@ def select_action(agent, state):
     return action.data
 
 
-def finish_episode(agent, optimizer):
+def finish_episode(agent, optimizer, train_genes=True, train_gene_layers=True):
     R = 0
     rewards = []
     for r in agent.rewards[::-1]:
@@ -170,6 +173,11 @@ def finish_episode(agent, optimizer):
         action.reinforce(r)
     optimizer.zero_grad()
     autograd.backward(agent.saved_actions, [None for _ in agent.saved_actions])
+    if not train_genes:
+        agent.genes.zero_grad()
+    if not train_gene_layers:
+        agent.gene_l1.zero_grad()
+        agent.gene_l2.zero_grad()
     optimizer.step()
     agent.returns = len(agent.rewards)
     del agent.rewards[:]
@@ -209,7 +217,7 @@ for i_episode in range(n_episodes):#count(1):
         # TODO: monitoring
         all_returns[i_episode, nn] = t
         running_reward = running_reward * 0.99 + t * 0.01
-        finish_episode(agent, optimizer)
+        finish_episode(agent, optimizer, train_genes, train_gene_layers)
         #if i_episode % args.log_interval == 0:
         if i_episode % recombine_every_n == 0:
             print('Episode {}\tLast length: {:5d}\tAverage length: {:.2f}'.format(
