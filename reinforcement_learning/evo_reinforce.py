@@ -2,7 +2,7 @@ import argparse
 import gym
 import numpy as np
 from itertools import count
-import itertools 
+import itertools
 
 import torch
 import torch.nn as nn
@@ -18,7 +18,7 @@ from torch import Tensor as TT
 Features:
     different recombinators
     recombine EVERYTHING
-    compare 
+    compare
 
 """
 
@@ -39,6 +39,11 @@ parser.add_argument('--save_path', type=str, default='./')
 parser.add_argument('--recombine_every_n', type=int, default=50)
 parser.add_argument('--n_episodes', type=int, default=50)
 parser.add_argument('--recombinator', type=str, default='dropout')
+#
+parser.add_argument('--n_agents', '-a', type=int, default=10)
+parser.add_argument('--lr', type=float, default=5e-3)
+parser.add_argument('--prop_survivors', '-ps', type=float, default=0.5)
+#
 parser.add_argument('--train_genes', type=int, default=1)
 parser.add_argument('--train_gene_layers', type=int, default=1)
 #
@@ -49,8 +54,8 @@ locals().update(args_dict)
 
 #
 n_genes = 31
-n_agents = 10
-n_survivors = n_agents / 2
+n_agents = args.n_agents
+n_survivors = int(n_agents * args.prop_survivors)
 #recombine_every_n  = 5
 
 env = gym.make('CartPole-v1')
@@ -75,7 +80,7 @@ class Policy(nn.Module):
         self.rewards = []
 
     def forward(self, x):
-        #x, genes = x[:, :4], x[:, 4:] 
+        #x, genes = x[:, :4], x[:, 4:]
         x = self.affine1(x)
         self.cbn = self.gene_l2(F.relu(self.gene_l1(self.genes)))
         x = x * (self.cbn[:,::2] + 1.) + self.cbn[:,1::2]
@@ -113,7 +118,7 @@ def recombine(agents):
     #print parents
     # ...and convert them BACK to lists :P
     parents = [list(p) for p in parents]
-    kids_genes = [which_parent * fit_agents[parent[0]].genes.data.numpy() + (1 - which_parent) * fit_agents[parent[1]].genes.data.numpy() for which_parent, parent in zip(which_parents, parents) ] 
+    kids_genes = [which_parent * fit_agents[parent[0]].genes.data.numpy() + (1 - which_parent) * fit_agents[parent[1]].genes.data.numpy() for which_parent, parent in zip(which_parents, parents) ]
     #print kids_genes[0]
     # TODO: replace the bad ones genes with the kids genes
     for kid_genes, agent in zip(kids_genes, unfit_agents):
@@ -134,7 +139,7 @@ def sync(agents):
 
 
 agents = [Policy() for _ in range(n_agents)]
-optimizers = [optim.SGD(agent.parameters(), lr=5e-3, momentum=0) for agent in agents]
+optimizers = [optim.SGD(agent.parameters(), lr=args.lr, momentum=0) for agent in agents]
 # TODO: adam
 #optimizers = [optim.Adam(agent.parameters(), lr=1e-2) for agent in agents]
 
@@ -194,7 +199,7 @@ all_returns = np.zeros((n_episodes, n_agents))
 for i_episode in range(n_episodes):#count(1):
 
     print i_episode
-    if i_episode > 0 and i_episode % recombine_every_n == 0:
+    if i_episode > 0 and i_episode % recombine_every_n == 0 and n_agents > 1:
         print "\t\t\trecombining!"
         recombine(agents)
 
@@ -229,6 +234,3 @@ for i_episode in range(n_episodes):#count(1):
     sync(agents)
 
 np.save(save_path + 'all_returns.npy', all_returns)
-
-
-
