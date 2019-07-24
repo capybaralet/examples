@@ -19,6 +19,8 @@ parser.add_argument('--render', action='store_true',
                     help='render the environment')
 parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='interval between training status logs (default: 10)')
+#
+parser.add_argument('--resume', action='store_true')
 args = parser.parse_args()
 
 
@@ -30,9 +32,14 @@ torch.manual_seed(args.seed)
 class Policy(nn.Module):
     def __init__(self):
         super(Policy, self).__init__()
+<<<<<<< HEAD
         self.affine1 = nn.Linear(4, 128)
         self.dropout = nn.Dropout(p=0.6)
         self.affine2 = nn.Linear(128, 2)
+=======
+        self.affine1 = nn.Linear(4, 64)
+        self.affine2 = nn.Linear(64, 2)
+>>>>>>> 3f1b7afa481c5764870a27d2b74a85849b778dca
 
         self.saved_log_probs = []
         self.rewards = []
@@ -45,9 +52,15 @@ class Policy(nn.Module):
         return F.softmax(action_scores, dim=1)
 
 
+<<<<<<< HEAD
 policy = Policy()
 optimizer = optim.Adam(policy.parameters(), lr=1e-2)
 eps = np.finfo(np.float32).eps.item()
+=======
+if not args.resume:
+    model = Policy()
+    optimizer = optim.Adam(model.parameters(), lr=1e-2)
+>>>>>>> 3f1b7afa481c5764870a27d2b74a85849b778dca
 
 
 def select_action(state):
@@ -74,6 +87,7 @@ def finish_episode():
     policy_loss = torch.cat(policy_loss).sum()
     policy_loss.backward()
     optimizer.step()
+<<<<<<< HEAD
     del policy.rewards[:]
     del policy.saved_log_probs[:]
 
@@ -100,6 +114,26 @@ def main():
         if running_reward > env.spec.reward_threshold:
             print("Solved! Running reward is now {} and "
                   "the last episode runs to {} time steps!".format(running_reward, t))
+=======
+    del model.rewards[:]
+    del model.saved_actions[:]
+
+if args.resume:
+    del model.rewards[:]
+    del model.saved_actions[:]
+
+
+running_reward = 10
+for i_episode in count(1):
+    state = env.reset()
+    for t in range(10000): # Don't infinite loop while learning
+        action = select_action(state)
+        state, reward, done, _ = env.step(action[0,0])
+        if args.render:
+            env.render()
+        model.rewards.append(reward)
+        if done:
+>>>>>>> 3f1b7afa481c5764870a27d2b74a85849b778dca
             break
 
 
