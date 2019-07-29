@@ -6,12 +6,14 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 
+import copy
+import numpy as np
 
 
 """
 TODO:
     set-up saving
-        save-path
+        save-path (FIXME!)
         results (just learning curves?)
     port to cluster and run with different thresholds
         git
@@ -65,11 +67,10 @@ parser.add_argument('--save-model', action='store_true', default=False,
 ########### DK added (below)
 #parser.add_argument('--setting', type=str, default="default")
 parser.add_argument('--improvement_threshold', type=float, default=0.) # how much do we need to improve by, in order to accept an update?
-
-
-PATH = 'improvement_threshold=' + str(improvement_threshold) + '____'
-
 args = parser.parse_args()
+
+PATH = 'improvement_threshold=' + str(args.improvement_threshold) + '____'
+
 use_cuda = not args.no_cuda and torch.cuda.is_available()
 
 torch.manual_seed(args.seed)
@@ -111,11 +112,13 @@ for epoch in range(1, args.epochs + 1): # we'll just use the first half of the d
     print ("begin training epoch", str(epoch))
     etl = enumerate(train_loader)
 
+    loss = 0
     for i in range(len(train_loader) // 2):
-        print (i)
+        #print (i)
         # save current parameters:
-        params = model.state_dict()
-        # TODO: how am I supposed to do this? 
+        params = copy.deepcopy(model.state_dict())
+        # TODO: how am I SUPPOSED to do this? 
+        # TODO: also monitor (and compare difference in loss on the CURRENT mini-batch)
         tr_data, tr_target = etl.__next__()[1]
         gen_data, gen_target = etl.__next__()[1]
         # check how well the current model generalizes
@@ -124,14 +127,21 @@ for epoch in range(1, args.epochs + 1): # we'll just use the first half of the d
         # update the parameters
         optimizer.zero_grad()
         output = model(tr_data)
+        tr_loss = loss
         loss = F.nll_loss(output, tr_target)
+        tr_diff = tr_loss - loss
         loss.backward()
         optimizer.step()
         # check whether the update lead to enough improvement:
         output = model(gen_data)
         gen_loss_post_update = F.nll_loss(output, gen_target)
-        if gen_loss_post_update - gen_loss_pre_update < args.improvement_threshold: # throw away this update
+        gen_diff = gen_loss_pre_update - gen_loss_post_update 
+        if gen_diff < args.improvement_threshold: # LARGER is better
+            # undo the last update
             model.load_state_dict(params)
+            print ("\t\t\t\t\t\tupdate REJECTED, gen_diff="  + str(np.round(gen_diff.detach().numpy()[()], 5)) + "  tr_diff=" + str(tr_diff.detach().numpy()[()]))
+        else:
+            print ("\t\t\t\t\t\tupdate accepted, gen_diff="  + str(np.round(gen_diff.detach().numpy()[()], 5)) + "  tr_diff=" + str(tr_diff.detach().numpy()[()]))
 
 
         batch_idx = i
