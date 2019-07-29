@@ -6,6 +6,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 
+print("torch imports finished")
+
 # DK
 from pylab import *
 
@@ -19,6 +21,7 @@ np = numpy
 
 import time
 
+print("ALL imports finished")
 
 
 """
