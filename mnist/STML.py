@@ -36,6 +36,7 @@ TODO:
 """
 
 
+
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
@@ -78,7 +79,7 @@ parser.add_argument('--log-interval', type=int, default=10, metavar='N',
 parser.add_argument('--improvement_threshold', type=float, default=0.) # how much do we need to improve by, in order to accept an update?
 parser.add_argument('--n_seeds', type=int, default=20)
 parser.add_argument('--save_dir', type=str, default=os.environ['SCRATCH']) # N.B.! you must specify the environment variable SCRATCH.  you can do this like: export $SCRATCH=<<complete file-path for the save_dir>>
-parser.add_argument('--data_path', type=str, default=os.environ['SLURM_TMPDIR']) # N.B.! you must specify the environment variable SCRATCH.  you can do this like: export $SCRATCH=<<complete file-path for the save_dir>>
+parser.add_argument('--data_path', type=str, default=os.environ['SCRATCH']) # N.B.! you must specify the environment variable SCRATCH.  you can do this like: export $SCRATCH=<<complete file-path for the save_dir>>
 
 ############################################################################333
 args = parser.parse_args()
