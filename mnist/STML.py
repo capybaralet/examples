@@ -67,9 +67,44 @@ parser.add_argument('--save-model', action='store_true', default=False,
 ########### DK added (below)
 #parser.add_argument('--setting', type=str, default="default")
 parser.add_argument('--improvement_threshold', type=float, default=0.) # how much do we need to improve by, in order to accept an update?
+parser.add_argument('--save_dir', type=str, default=os.environ['SCRATCH']) # N.B.! you must specify the environment variable SCRATCH.  you can do this like: export $SCRATCH=<<complete file-path for the save_dir>>
+
+############################################################################333
+args = parser.parse_args()
+print (args)
+args_dict = args.__dict__
+
+# TODO: why do I end up with single quotes around the directory name?
+if args_dict['save_dir'] is None:
+    try:
+        save_dir = os.environ['SCRATCH']
+    except:
+        print ("\n\n\n\t\t\t\t WARNING: save_dir is None! Results will not be saved! \n\n\n")
+else:
+    # save_dir = filename + PROVIDED parser arguments
+    flags = [flag.lstrip('--') for flag in sys.argv[1:] if not (flag.startswith('--save_dir') or flag.startswith('--train'))]
+    exp_title = '_'.join(flags)
+    save_dir = os.path.join(args_dict.pop('save_dir'), os.path.basename(__file__) + '___' + exp_title)
+    print("\t\t save_dir=",  save_dir)
+
+    # make directory for results
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    # save a copy of THIS SCRIPT in save_dir
+    shutil.copy(__file__, os.path.join(save_dir,'exp_script.py'))
+    # save ALL parser arguments
+    with open (os.path.join(save_dir,'exp_settings.txt'), 'w') as f:
+        for key in sorted(args_dict):
+            f.write(key+'\t'+str(args_dict[key])+'\n')
+
+locals().update(args_dict)
+############################################################################333
+
+PATH = 'improvement_threshold=' + str(improvement_threshold) + '____'
+
 args = parser.parse_args()
 
-PATH = 'improvement_threshold=' + str(args.improvement_threshold) + '____'
+###################################
 
 use_cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -170,11 +205,11 @@ for epoch in range(1, args.epochs + 1): # we'll just use the first half of the d
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset), acc))
 
-    np.savetxt(PATH + 'te_loss', te_loss)
-    np.savetxt(PATH + 'te_acc', te_acc)
+    np.savetxt(os.path.join(save_dir, 'te_loss.txt'), te_loss)
+    np.savetxt(os.path.join(save_dir, 'te_acc.txt'), te_acc)
 
 if (args.save_model):
-    torch.save(model.state_dict(),"mnist_cnn.pt")
+    torch.save(model.state_dict(), os.path.join(save_dir, "mnist_cnn.pt"))
 
 
 
