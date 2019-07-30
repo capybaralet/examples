@@ -61,6 +61,21 @@ class Net(nn.Module):
         return F.log_softmax(x, dim=1)
 
 
+# MLP
+class Net(nn.Module):
+    def __init__(self):
+        super(Net, self).__init__()
+        self.fc1 = nn.Linear(28*28,500)
+        self.fc2 = nn.Linear(500, 500)
+        self.fc3 = nn.Linear(500, 10)
+
+    def forward(self, x):
+        x = x.view(-1, 28*28)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        return F.log_softmax(self.fc3(x), dim=1)
+
+
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
 parser.add_argument('--batch-size', type=int, default=64, metavar='N',
