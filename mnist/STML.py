@@ -23,6 +23,8 @@ import time
 
 print("ALL imports finished")
 
+os.getcwd()
+os.listdir()
 
 """
 TODO:
@@ -65,7 +67,7 @@ parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                     help='input batch size for training (default: 64)')
 parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                     help='input batch size for testing (default: 1000)')
-parser.add_argument('--epochs', type=int, default=100, metavar='N',
+parser.add_argument('--epochs', type=int, default=2, metavar='N',
                     help='number of epochs to train (default: 10)')
 parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                     help='learning rate (default: 0.01)')
@@ -80,7 +82,8 @@ parser.add_argument('--log-interval', type=int, default=10, metavar='N',
 ########### DK added (below)
 #parser.add_argument('--setting', type=str, default="default")
 parser.add_argument('--improvement_threshold', type=float, default=0.) # how much do we need to improve by, in order to accept an update?
-parser.add_argument('--n_seeds', type=int, default=20)
+parser.add_argument('--n_seeds', type=int, default=10)
+parser.add_argument('--verbosity', type=int, default=0)
 parser.add_argument('--save_dir', type=str, default=os.environ['SCRATCH']) # N.B.! you must specify the environment variable SCRATCH.  you can do this like: export $SCRATCH=<<complete file-path for the save_dir>>
 parser.add_argument('--data_path', type=str, default=os.environ['SCRATCH']) # N.B.! you must specify the environment variable SCRATCH.  you can do this like: export $SCRATCH=<<complete file-path for the save_dir>>
 
@@ -127,6 +130,9 @@ torch.manual_seed(args.seed)
 
 device = torch.device("cuda" if use_cuda else "cpu")
 
+print ("torch.cuda.is_available()", torch.cuda.is_available())
+print ("device=", device)
+
 kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
 train_loader = torch.utils.data.DataLoader(
     datasets.MNIST(data_path, train=True, download=True,
@@ -160,10 +166,11 @@ optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
 
 
-threshs = [-np.inf, -.1, -.01, -.001, 0, .001, .01, .1]
+#threshs = [-np.inf, -.1, -.01, -.001, 0, .001, .01, .1]
+threshs = [-np.inf, 0]
 
 assert args.batch_size == 64
-n_batches = 460
+n_batches = 469
 n_steps =  n_batches * args.epochs
 
 tr_improvements = np.inf * np.ones((n_seeds, len(threshs), n_steps))
@@ -196,7 +203,7 @@ for seed in range(n_seeds):
 
         step = 0
 
-        for epoch in range(1, args.epochs + 1): # we'll just use the first half of the data at each epoch...
+        for epoch in range(args.epochs): # we'll just use the first half of the data at each epoch...
             print ("seed, thresh_n, epoch = ", seed, thresh_n, epoch)
             print ("total time: ", time.time() - t0)
 
@@ -234,16 +241,19 @@ for seed in range(n_seeds):
                 tr_improvements[seed, thresh_n, step] = tr_improvement
                 gen_improvements[seed, thresh_n, step] = gen_improvement
 
-                if gen_improvement > args.improvement_threshold:
-                    print ("\t\t\t\t\t\tupdate accepted, gen_improvement="  + str(np.round(gen_improvement, 4)) + "  tr_improvement=" + str(np.round(tr_improvement, 4)))
-                else:
+                if gen_improvement < args.improvement_threshold:
                     # undo the last update
                     model.load_state_dict(params)
-                    print ("\t\t\t\t\t\tupdate REJECTED, gen_improvement="  + str(np.round(gen_improvement, 4)) + "  tr_improvement=" + str(np.round(tr_improvement, 4)))
+                
+                if verbosity > 2: 
+                    if gen_improvement > args.improvement_threshold:
+                        print ("\t\t\t\t\t\tupdate accepted, gen_improvement="  + str(np.round(gen_improvement, 4)) + "  tr_improvement=" + str(np.round(tr_improvement, 4)))
+                    else:
+                        print ("\t\t\t\t\t\tupdate REJECTED, gen_improvement="  + str(np.round(gen_improvement, 4)) + "  tr_improvement=" + str(np.round(tr_improvement, 4)))
 
 
                 batch_idx = i
-                if batch_idx % args.log_interval == 0: # TODO: misleading...
+                if verbosity > 1 and batch_idx % args.log_interval == 0: # TODO: misleading...
                     print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                         epoch, batch_idx * len(tr_data), len(train_loader.dataset),
                         100. * batch_idx / len(train_loader), loss.item()))
