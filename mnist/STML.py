@@ -78,11 +78,11 @@ class Net(nn.Module):
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
-parser.add_argument('--batch-size', type=int, default=64, metavar='N',
+parser.add_argument('--batch-size', type=int, default=100, metavar='N',
                     help='input batch size for training (default: 64)')
 parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                     help='input batch size for testing (default: 1000)')
-parser.add_argument('--epochs', type=int, default=2, metavar='N',
+parser.add_argument('--epochs', type=int, default=200, metavar='N',
                     help='number of epochs to train (default: 10)')
 parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                     help='learning rate (default: 0.01)')
@@ -185,8 +185,12 @@ threshs = [-np.inf, -.1, -.01, -.001, 0, .001, .01, .1]
 threshs = [-np.inf, -.001, 0, .001]
 threshs = [-np.inf, 0]
 
-assert args.batch_size == 64
-n_batches = 469
+batch_sizes = [1,10,30,100,300]
+
+# is data being shuffled?
+
+assert 30000 % args.batch_size == 0
+n_batches = 30000 // args.batch_size
 n_steps =  n_batches * args.epochs
 
 tr_improvements = np.inf * np.ones((n_seeds, len(threshs), n_steps))
