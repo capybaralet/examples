@@ -96,9 +96,13 @@ parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='how many batches to wait before logging training status')
 ########### DK added (below)
 #parser.add_argument('--setting', type=str, default="default")
-parser.add_argument('--improvement_threshold', type=float, default=0.) # how much do we need to improve by, in order to accept an update?
-parser.add_argument('--n_seeds', type=int, default=10)
-parser.add_argument('--verbosity', type=int, default=0)
+#parser.add_argument('--improvement_threshold', type=float, default=0.) # how much do we need to improve by, in order to accept an update?
+# THESE ARGUMENTS ARE HANDLED SPECIALLY (you can pass a list or a single value)
+parser.add_argument('--seed', type=str, default='1')
+parser.add_argument('--thresh', type=str, default='0')
+#
+parser.add_argument('--shuffle', type=str, default='1')
+parser.add_argument('--verbosity', type=int, default=1)
 parser.add_argument('--save_dir', type=str, default=os.environ['SCRATCH']) # N.B.! you must specify the environment variable SCRATCH.  you can do this like: export $SCRATCH=<<complete file-path for the save_dir>>
 parser.add_argument('--data_path', type=str, default=os.environ['SCRATCH']) # N.B.! you must specify the environment variable SCRATCH.  you can do this like: export $SCRATCH=<<complete file-path for the save_dir>>
 
@@ -132,9 +136,6 @@ else:
 
 locals().update(args_dict)
 ############################################################################333
-
-PATH = 'improvement_threshold=' + str(improvement_threshold) + '____'
-
 args = parser.parse_args()
 
 ###################################
@@ -155,13 +156,13 @@ train_loader = torch.utils.data.DataLoader(
                        transforms.ToTensor(),
                        transforms.Normalize((0.1307,), (0.3081,))
                    ])),
-    batch_size=args.batch_size, shuffle=True, **kwargs)
+    batch_size=args.batch_size, shuffle=shuffle, **kwargs)
 test_loader = torch.utils.data.DataLoader(
     datasets.MNIST(data_path, train=False, transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.1307,), (0.3081,))
                    ])),
-    batch_size=args.test_batch_size, shuffle=True, **kwargs)
+    batch_size=args.test_batch_size, shuffle=shuffle, **kwargs)
 
 
 model = Net().to(device)
@@ -178,16 +179,15 @@ optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
 
 
+try:
+    seeds = [int(seeds)]
+except:
+    seeds = [int(s) for s in seeds[1:-1].split(',')]
+try:
+    threshs = [float(threshs)]
+except:
+    threshs = [int(s) for s in threshs[1:-1].split(',')]
 
-
-
-threshs = [-np.inf, -.1, -.01, -.001, 0, .001, .01, .1]
-threshs = [-np.inf, -.001, 0, .001]
-threshs = [-np.inf, 0]
-
-batch_sizes = [1,10,30,100,300]
-
-# is data being shuffled?
 
 assert 30000 % args.batch_size == 0
 n_batches = 30000 // args.batch_size
@@ -261,12 +261,12 @@ for seed in range(n_seeds):
                 tr_improvements[seed, thresh_n, step] = tr_improvement
                 gen_improvements[seed, thresh_n, step] = gen_improvement
 
-                if gen_improvement < args.improvement_threshold:
+                if gen_improvement < thresh:
                     # undo the last update
                     model.load_state_dict(params)
                 
                 if verbosity > 2: 
-                    if gen_improvement > args.improvement_threshold:
+                    if gen_improvement > thresh:
                         print ("\t\t\t\t\t\tupdate accepted, gen_improvement="  + str(np.round(gen_improvement, 4)) + "  tr_improvement=" + str(np.round(tr_improvement, 4)))
                     else:
                         print ("\t\t\t\t\t\tupdate REJECTED, gen_improvement="  + str(np.round(gen_improvement, 4)) + "  tr_improvement=" + str(np.round(tr_improvement, 4)))
