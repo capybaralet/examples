@@ -166,7 +166,8 @@ optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
 
 
-#threshs = [-np.inf, -.1, -.01, -.001, 0, .001, .01, .1]
+threshs = [-np.inf, -.1, -.01, -.001, 0, .001, .01, .1]
+threshs = [-np.inf, -.001, 0, .001]
 threshs = [-np.inf, 0]
 
 assert args.batch_size == 64
