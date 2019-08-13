@@ -62,44 +62,42 @@ class Net(nn.Module):
 
 
 # MLP
-class Net(nn.Module):
-    def __init__(self):
-        super(Net, self).__init__()
-        self.fc1 = nn.Linear(28*28,500)
-        self.fc2 = nn.Linear(500, 500)
-        self.fc3 = nn.Linear(500, 10)
-
-    def forward(self, x):
-        x = x.view(-1, 28*28)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return F.log_softmax(self.fc3(x), dim=1)
-
+#class Net(nn.Module):
+#    def __init__(self):
+#        super(Net, self).__init__()
+#        self.fc1 = nn.Linear(28*28,500)
+#        self.fc2 = nn.Linear(500, 500)
+#        self.fc3 = nn.Linear(500, 10)
+#
+#    def forward(self, x):
+#        x = x.view(-1, 28*28)
+#        x = F.relu(self.fc1(x))
+#        x = F.relu(self.fc2(x))
+#        return F.log_softmax(self.fc3(x), dim=1)
+#
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
 parser.add_argument('--batch-size', type=int, default=100, metavar='N',
-                    help='input batch size for training (default: 64)')
+                    help='input batch size for training (default: 100)')
 parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                     help='input batch size for testing (default: 1000)')
-parser.add_argument('--epochs', type=int, default=200, metavar='N',
-                    help='number of epochs to train (default: 10)')
+parser.add_argument('--epochs', type=int, default=100, metavar='N',
+                    help='number of epochs to train (default: 200)')
 parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                     help='learning rate (default: 0.01)')
 parser.add_argument('--momentum', type=float, default=0.0, metavar='M',
                     help='SGD momentum (default: 0.0)')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training')
-parser.add_argument('--seed', type=int, default=1, metavar='S',
-                    help='random seed (default: 1)')
 parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='how many batches to wait before logging training status')
 ########### DK added (below)
 #parser.add_argument('--setting', type=str, default="default")
 #parser.add_argument('--improvement_threshold', type=float, default=0.) # how much do we need to improve by, in order to accept an update?
 # THESE ARGUMENTS ARE HANDLED SPECIALLY (you can pass a list or a single value)
-parser.add_argument('--seed', type=str, default='1')
-parser.add_argument('--thresh', type=str, default='0')
+parser.add_argument('--seeds', type=str, default='1')
+parser.add_argument('--threshs', type=str, default='0')
 #
 parser.add_argument('--shuffle', type=str, default='1')
 parser.add_argument('--verbosity', type=int, default=1)
@@ -137,47 +135,7 @@ else:
 locals().update(args_dict)
 ############################################################################333
 args = parser.parse_args()
-
-###################################
-
-use_cuda = not args.no_cuda and torch.cuda.is_available()
-
-torch.manual_seed(args.seed)
-
-device = torch.device("cuda" if use_cuda else "cpu")
-
-print ("torch.cuda.is_available()", torch.cuda.is_available())
-print ("device=", device)
-
-kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
-train_loader = torch.utils.data.DataLoader(
-    datasets.MNIST(data_path, train=True, download=True,
-                   transform=transforms.Compose([
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.1307,), (0.3081,))
-                   ])),
-    batch_size=args.batch_size, shuffle=shuffle, **kwargs)
-test_loader = torch.utils.data.DataLoader(
-    datasets.MNIST(data_path, train=False, transform=transforms.Compose([
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.1307,), (0.3081,))
-                   ])),
-    batch_size=args.test_batch_size, shuffle=shuffle, **kwargs)
-
-
-model = Net().to(device)
-optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
-
-
-
-
-
-
-
-
-
-
-
+############################################################################333
 
 try:
     seeds = [int(seeds)]
@@ -187,11 +145,25 @@ try:
     threshs = [float(threshs)]
 except:
     threshs = [int(s) for s in threshs[1:-1].split(',')]
+###################################
+
+use_cuda = not args.no_cuda and torch.cuda.is_available()
+
+
+device = torch.device("cuda" if use_cuda else "cpu")
+
+print ("torch.cuda.is_available()", torch.cuda.is_available())
+print ("device=", device)
+
+kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
+
 
 
 assert 30000 % args.batch_size == 0
 n_batches = 30000 // args.batch_size
 n_steps =  n_batches * args.epochs
+
+n_seeds = len(seeds)
 
 tr_improvements = np.inf * np.ones((n_seeds, len(threshs), n_steps))
 gen_improvements = np.inf * np.ones((n_seeds, len(threshs), n_steps))
@@ -211,6 +183,26 @@ t0 = time.time()
 
 for seed in range(n_seeds):
     for thresh_n, thresh in enumerate(threshs):
+
+        torch.manual_seed(seed)
+        train_loader = torch.utils.data.DataLoader(
+            datasets.MNIST(data_path, train=True, download=True,
+                           transform=transforms.Compose([
+                               transforms.ToTensor(),
+                               transforms.Normalize((0.1307,), (0.3081,))
+                           ])),
+            batch_size=args.batch_size, shuffle=shuffle, **kwargs)
+        test_loader = torch.utils.data.DataLoader(
+            datasets.MNIST(data_path, train=False, transform=transforms.Compose([
+                               transforms.ToTensor(),
+                               transforms.Normalize((0.1307,), (0.3081,))
+                           ])),
+            batch_size=args.test_batch_size, shuffle=shuffle, **kwargs)
+
+
+        model = Net().to(device)
+        optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
+
 
         experiment_n = seed * len(threshs) + thresh_n
         print ('\n\n')

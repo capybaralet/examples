@@ -1,0 +1,9 @@
+I'm running these on niagara.
+There are 4 relevant scripts:
+ - STML.py : experiment script
+ - make_niagara_launcher.py : creates STML_launcher.sh
+ - niagara_launcher.sh : run many copies of STML_launch_helper.sh on STML.py with different args
+ - niagara_launch_helper.sh : run a single experiment
+
+ These naming conventions are bad.
+ They are inherited from myopic_agents
